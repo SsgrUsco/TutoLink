@@ -267,6 +267,43 @@ export class TutoriasPage implements OnInit {
     }
   }
 
+  async cancelarTutoria(tutoria: Tutoria): Promise<void> {
+    if (!this.esTutor || this.guardando() || this.cargando || !this.futura(tutoria)) return;
+    const usuario = this.usuarioId;
+    this.guardando.set(true);
+    try {
+      const alerta = await this.alertas.create({
+        header: 'Cancelar tutoría',
+        message: 'La sesión dejará de estar disponible para los estudiantes. Esta acción no se puede deshacer.',
+        cssClass: 'tl-action-alert',
+        buttons: [
+          { text: 'Volver', role: 'cancel', cssClass: 'tl-alert-neutral' },
+          { text: 'Cancelar tutoría', role: 'confirm', cssClass: 'tl-alert-danger' },
+        ],
+      });
+      await alerta.present();
+      if ((await alerta.onDidDismiss()).role !== 'confirm' || usuario !== this.usuarioId) return;
+      await this.servicio.cancelarTutoria(tutoria.id);
+      if (usuario !== this.usuarioId) return;
+      this.tutorias = this.tutorias.map((t) => (t.id === tutoria.id ? { ...t, estado: 'cancelada' } : t));
+      this.seleccionada = this.tutorias.find((t) => t.id === tutoria.id) ?? null;
+      const aviso = await this.mensajes.create({ message: 'Tutoría cancelada.', color: 'success', duration: 3000 });
+      await aviso.present();
+    } catch (error) {
+      if (usuario !== this.usuarioId) return;
+      const aviso = await this.mensajes.create({
+        message: mensajeFirebase(error, 'No pudimos confirmar la cancelación. Actualiza las tutorías.'),
+        color: 'danger',
+        duration: 5000,
+      });
+      await aviso.present();
+      this.cargar();
+    } finally {
+      this.guardando.set(false);
+      this.detector.markForCheck();
+    }
+  }
+
   colorEstado(estado: EstadoTutoria): string {
     return estado === 'cancelada' ? 'danger' : estado === 'finalizada' ? 'medium' : 'success';
   }

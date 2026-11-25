@@ -11,7 +11,7 @@ service cloud.firestore {
     function oldBlocks(uid) { return exists(agendaPath(uid)) ? get(agendaPath(uid)).data.bloques : []; }
     function eligible(uid,t) {
       return own(uid) && profile(uid).rol == 'estudiante' && profile(uid).facultadId == t.facultadId
-        && t.estado == 'programada' && t.inicio > request.time;
+        && ((t.estado == 'programada' && t.inicio > request.time) || t.estado == 'cancelada');
     }
     function reservationTransition(uid,id) {
       let t = get(sessionPath(id)).data;
@@ -24,7 +24,7 @@ service cloud.firestore {
         && next.tutoriaId == id && next.actualizada == request.time
         && after.ultimaReservaUid == uid && agenda.ultimaTutoriaId == id
         && (
-          (previous == 'cancelada' && next.estado == 'confirmada'
+          (t.estado == 'programada' && previous == 'cancelada' && next.estado == 'confirmada'
             && t.cuposDisponibles > 0 && after.cuposDisponibles == t.cuposDisponibles - 1
             && !occupied.hasAny(t.bloques)
             && agenda.bloques == occupied.concat(t.bloques))
@@ -122,6 +122,11 @@ service cloud.firestore {
         : resource.data.facultadId == profile(request.auth.uid).facultadId);
       allow list: if signedIn() && resource.data.facultadId == profile(request.auth.uid).facultadId;
       allow create: if signedIn() && validTutoria();
+      allow update: if signedIn() && profile(request.auth.uid).rol == 'tutor'
+        && resource.data.tutorUid == request.auth.uid
+        && resource.data.estado == 'programada' && resource.data.inicio > request.time
+        && request.resource.data.estado == 'cancelada'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['estado']);
       allow update: if signedIn()
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cuposDisponibles','ultimaReservaUid'])
         && request.resource.data.cuposDisponibles is int

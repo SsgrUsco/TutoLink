@@ -4,13 +4,14 @@ import {
   collection,
   doc,
   getDocsFromServer,
+  getDocFromServer,
   query,
   runTransaction,
   serverTimestamp,
   Timestamp,
   where,
 } from 'firebase/firestore';
-import { defer, Observable, timeout } from 'rxjs';
+import { defer, firstValueFrom, Observable, timeout } from 'rxjs';
 import { NuevaTutoria, Reserva, Tutoria } from '../../modelos/tutoria.model';
 import { AuthService } from './auth.service';
 import { FirebaseService } from './firebase.service';
@@ -72,6 +73,21 @@ export class TutoriasService {
     });
   }
 
+  async cancelarTutoria(id: number): Promise<void> {
+    const uid = this.uid();
+    if (this.auth.usuarioActual?.rol !== 'tutor') throw this.error('Solo el tutor puede cancelar su tutoría.');
+    const referencia = doc(this.firebase.db, 'tutorias', String(id));
+    await runTransaction(this.firebase.db, async (tx) => {
+      const documento = await tx.get(referencia);
+      const t = documento.data();
+      if (!t || t['tutorUid'] !== uid) throw this.error('No puedes cancelar esta tutoría.');
+      if (t['estado'] === 'cancelada') return;
+      if (t['estado'] !== 'programada' || (t['inicio'] as Timestamp).toMillis() <= Date.now())
+        throw this.error('Solo puedes cancelar tutorías programadas que aún no han comenzado.');
+      tx.update(referencia, { estado: 'cancelada' });
+    });
+  }
+
   consultar(): Observable<Tutoria[]> {
     return defer(async () => {
       const usuario = this.auth.usuarioActual;
@@ -109,7 +125,15 @@ export class TutoriasService {
     return defer(async () => {
       const uid = this.uid();
       const resultado = await getDocsFromServer(collection(this.firebase.db, 'usuarios', uid, 'reservas'));
-      return resultado.docs.map((r) => ({ tutoriaId: Number(r.id), estado: r.data()['estado'] }) as Reserva);
+      const reservas = resultado.docs.map((r) => ({ tutoriaId: Number(r.id), estado: r.data()['estado'] }) as Reserva);
+      for (const reserva of reservas.filter((r) => r.estado === 'confirmada')) {
+        const tutoria = await getDocFromServer(doc(this.firebase.db, 'tutorias', String(reserva.tutoriaId)));
+        if (tutoria.data()?.['estado'] === 'cancelada') {
+          await firstValueFrom(this.cambiarReserva(reserva.tutoriaId, true));
+          reserva.estado = 'cancelada';
+        }
+      }
+      return reservas;
     }).pipe(timeout(15000));
   }
 
@@ -117,6 +141,7 @@ export class TutoriasService {
     return defer(async () => {
       if (this.auth.usuarioActual?.rol !== 'estudiante') throw this.error('Las reservas son para estudiantes.');
       const uid = this.uid();
+      if (!cancelar) await firstValueFrom(this.misReservas());
       const db = this.firebase.db;
       await runTransaction(db, async (transaction) => {
         const tutoriaRef = doc(db, 'tutorias', String(id));
@@ -130,11 +155,13 @@ export class TutoriasService {
         ]);
         if (!tutoria.exists() || !perfil.exists()) throw this.error('No se encontró la tutoría o el perfil.');
         const t = tutoria.data();
-        if (t['estado'] !== 'programada' || (t['inicio'] as Timestamp).toMillis() <= Date.now())
+        const canceladaPorTutor = cancelar && t['estado'] === 'cancelada';
+        if (!canceladaPorTutor && (t['estado'] !== 'programada' || (t['inicio'] as Timestamp).toMillis() <= Date.now()))
           throw this.error('Esta tutoría ya comenzó o no está disponible.');
         if (t['facultadId'] !== perfil.data()['facultadId'])
           throw this.error('Solo puedes reservar tutorías de tu facultad.');
         const estado = reserva.data()?.['estado'];
+        if (canceladaPorTutor && estado === 'cancelada') return;
         const bloques = t['bloques'] as string[];
         const ocupados = (agenda.data()?.['bloques'] ?? []) as string[];
         if (cancelar) {

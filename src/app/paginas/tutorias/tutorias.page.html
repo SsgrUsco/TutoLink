@@ -263,8 +263,20 @@
                     >
                   </ion-list>
                   <p class="tl-muted">Horarios de Colombia (UTC−5).</p>
-                  <p *ngIf="reservada(tutoria.id)">Tienes un cupo reservado en esta tutoría.</p>
-                  <p *ngIf="!futura(tutoria)">
+                  <p *ngIf="reservada(tutoria.id) && tutoria.estado !== 'cancelada'">
+                    Tienes un cupo reservado en esta tutoría.
+                  </p>
+                  <ion-button
+                    *ngIf="esTutor && tutoria.tutorUid === auth.usuarioActual?.id && futura(tutoria)"
+                    expand="block"
+                    color="danger"
+                    class="tl-destructive-button"
+                    [disabled]="guardando() || cargando || !servicioDisponible"
+                    (click)="cancelarTutoria(tutoria)"
+                    >{{ guardando() ? 'Procesando…' : 'Cancelar tutoría' }}</ion-button
+                  >
+                  <p *ngIf="tutoria.estado === 'cancelada'">Esta tutoría fue cancelada y no admite reservas.</p>
+                  <p *ngIf="!futura(tutoria) && tutoria.estado !== 'cancelada'">
                     Las reservas y cancelaciones se permiten únicamente antes del inicio de una tutoría programada.
                   </p>
                   <ion-button

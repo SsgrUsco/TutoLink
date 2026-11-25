@@ -69,3 +69,5 @@ Se retiraron el servidor Express, sus dependencias y migraciones, la configuraci
 ## Servicios y utilidades
 
 Los ocho servicios están en `src/app/nucleo/servicios`: autenticación, Firebase, facultades, tutorías, materiales, apuntes, almacenamiento local de apuntes y cámara. `CamaraService` reúne permisos, apertura de cámara/galería y recuperación de capturas. `comprimirFoto` es un método privado de `ApuntesService`, junto con el límite de tamaño de las imágenes, porque solo lo utiliza la sincronización de apuntes. Las pruebas de cámara se separan por permisos y recuperación, pero comprueban el mismo servicio.
+
+El tutor puede cancelar sus propias tutorías programadas antes del inicio, con confirmación. La sesión permanece como cancelada y no admite reservas nuevas. Las reservas previas y sus bloques de agenda se liberan cuando cada estudiante consulta sus reservas o intenta reservar otra sesión; no se modifican cuentas ajenas desde el cliente del tutor.

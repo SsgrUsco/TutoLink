@@ -65,6 +65,25 @@ const { doc, setDoc, getDoc, getDocs, collection, query, where, updateDoc, runTr
     await assertFails(reserve(tutor,'tutor',100));
     await assertSucceeds(reserve(a,'a',100));
     await assertSucceeds(reserve(a,'a',100,true));
+    await assertSucceeds(setDoc(doc(tutor,'tutorias','102'),{...sesion,bloques:['hora-cancelada']}));
+    await assertSucceeds(reserve(a,'a',102));
+    await assertFails(updateDoc(doc(a,'tutorias','102'),{estado:'cancelada'}));
+    await env.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(),'usuarios','otroTutor'),{nombre:'Otro',rol:'tutor',facultadId:1});
+    });
+    const otroTutor=env.authenticatedContext('otroTutor').firestore();
+    await assertFails(updateDoc(doc(otroTutor,'tutorias','102'),{estado:'cancelada'}));
+    await assertFails(updateDoc(doc(tutor,'tutorias','102'),{estado:'cancelada',cuposDisponibles:5}));
+    await assertSucceeds(updateDoc(doc(tutor,'tutorias','102'),{estado:'cancelada'}));
+    await assertFails(reserve(b,'b',102));
+    await assertSucceeds(reserve(a,'a',102,true));
+    assert.deepEqual((await getDoc(doc(a,'agendas','a'))).data().bloques,[]);
+    await assertFails(updateDoc(doc(tutor,'tutorias','102'),{estado:'programada'}));
+    await env.withSecurityRulesDisabled(async ctx => {
+      await setDoc(doc(ctx.firestore(),'tutorias','103'),{...sesion,inicio:Timestamp.fromMillis(Date.now()-60000)});
+    });
+    await assertFails(updateDoc(doc(tutor,'tutorias','103'),{estado:'cancelada'}));
+    console.log('PASS: cancelación del propietario, permisos, liberación de agenda y bloqueo de nuevas reservas.');
     console.log('PASS: registro de tutor, creación, autoría, facultad, validación y reservas de estudiantes.');
     await assertFails(updateDoc(doc(a,'tutorias','1'),{cuposDisponibles:0,ultimaReservaUid:'a'}));
     await assertFails(setDoc(doc(a,'usuarios','a','reservas','1'),{tutoriaId:1,estado:'confirmada',actualizada:serverTimestamp()}));
