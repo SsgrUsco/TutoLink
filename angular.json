@@ -33,7 +33,10 @@
                 "output": "assets"
               }
             ],
-            "styles": ["src/global.scss", "src/theme/variables.scss"],
+            "styles": [
+              "src/global.scss",
+              "src/theme/variables.scss"
+            ],
             "scripts": [],
             "browser": "src/main.ts"
           },
@@ -67,6 +70,19 @@
             },
             "ci": {
               "progress": false
+            },
+            "firebase-emulator": {
+              "optimization": true,
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.firebase-emulator.ts"
+                }
+              ],
+              "outputPath": {
+                "base": "www-emulator",
+                "browser": ""
+              }
             }
           },
           "defaultConfiguration": "production"
@@ -97,8 +113,11 @@
           "options": {
             "buildTarget": "::development",
             "runnerConfig": "vitest.config.mts",
-            "setupFiles": ["src/test-setup.ts"],
-            "tsConfig": "tsconfig.spec.json"
+            "setupFiles": [
+              "src/test-setup.ts"
+            ],
+            "tsConfig": "tsconfig.spec.json",
+            "isolate": true
           }
         },
         "lint": {
@@ -116,7 +135,10 @@
     }
   },
   "cli": {
-    "schematicCollections": ["@ionic/angular-toolkit"]
+    "schematicCollections": [
+      "@ionic/angular-toolkit"
+    ],
+    "analytics": false
   },
   "schematics": {
     "@ionic/angular-toolkit:component": {

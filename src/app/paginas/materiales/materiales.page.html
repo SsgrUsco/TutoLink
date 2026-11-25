@@ -1,0 +1,113 @@
+<ion-header class="tl-header">
+  <ion-toolbar color="primary"><app-brand /></ion-toolbar>
+</ion-header>
+<ion-content>
+  <ion-grid class="tl-page tl-workspace">
+    <ion-row class="tl-page-heading"
+      ><ion-col size="12"
+        ><h1>Materiales</h1>
+        <p class="tl-muted">Busca lecturas y conserva tus referencias de estudio.</p></ion-col
+      ></ion-row
+    >
+    <ion-row
+      ><ion-col size="12"
+        ><ion-card>
+          <ion-card-header><ion-card-title>Tu biblioteca de consulta</ion-card-title></ion-card-header>
+          <ion-card-content>
+            <p>Busca por título, autor o tema. Guarda referencias para consultarlas sin conexión.</p>
+            <ion-segment class="tl-library-tabs" mode="md" [(ngModel)]="vista" aria-label="Biblioteca">
+              <ion-segment-button value="buscar"><ion-label>Buscar</ion-label></ion-segment-button>
+              <ion-segment-button value="guardados"><ion-label>Guardados</ion-label></ion-segment-button>
+            </ion-segment>
+            <form *ngIf="vista === 'buscar'" (ngSubmit)="buscar()">
+              <ion-searchbar
+                name="consulta"
+                [(ngModel)]="consulta"
+                placeholder="Título, autor o tema"
+                aria-label="Buscar libros"
+                [maxlength]="120"
+                [disabled]="cargando"
+              ></ion-searchbar>
+              <ion-button type="submit" expand="block" [disabled]="cargando || consulta.trim().length < 3"
+                >{{ cargando ? 'Buscando…' : 'Buscar en Open Library' }}</ion-button
+              >
+              <p class="tl-muted">Escribe al menos 3 caracteres para buscar.</p>
+            </form>
+            <p *ngIf="errorLocal" role="alert">{{ errorLocal }}</p>
+            <div *ngIf="vista === 'buscar'" aria-live="polite">
+              <p *ngIf="error" role="alert">{{ error }}</p>
+              <p *ngIf="cargando"><ion-spinner name="dots"></ion-spinner> Consultando libros…</p>
+              <p *ngIf="consultado && !cargando && !error">
+                {{ resultados.length }} resultados mostrados para «{{ ultimaConsulta }}».
+              </p>
+              <p *ngIf="consultado && !cargando && !error && resultados.length === 0">
+                No encontramos coincidencias. Prueba otro título o tema.
+              </p>
+            </div>
+            <p *ngIf="vista === 'guardados' && guardados.length === 0 && !errorLocal">
+              Aún no has guardado referencias. Abre un resultado y pulsa Guardar referencia.
+            </p>
+            <ion-list>
+              <ion-item *ngFor="let libro of librosVisibles" [button]="true" (click)="abrir(libro)" [detail]="true">
+                <ion-label class="ion-text-wrap"
+                  ><h2>{{ libro.titulo }}</h2>
+                  <p>{{ libro.autores.join(', ') || 'Autor no indicado' }}</p>
+                  <p>{{ libro.anio ?? 'Año no indicado' }}</p></ion-label
+                >
+              </ion-item>
+            </ion-list>
+            <p class="tl-muted">
+              Fuente: <a href="https://openlibrary.org" target="_blank" rel="noopener noreferrer">Open Library</a>.
+            </p>
+          </ion-card-content>
+        </ion-card>
+        <ion-modal class="tl-modal" [isOpen]="modalAbierto" (didDismiss)="modalAbierto = false">
+          <ng-template>
+            <ion-header class="tl-modal-header">
+              <ion-toolbar color="primary"><app-brand /></ion-toolbar
+              ><ion-toolbar color="neutral" class="tl-modal-heading"
+                ><ion-title>Detalle del material</ion-title
+                ><ion-buttons slot="end"
+                  ><ion-button color="secondary" fill="solid" (click)="modalAbierto = false"
+                    >Cerrar</ion-button
+                  ></ion-buttons
+                ></ion-toolbar
+              ></ion-header
+            >
+            <ion-content class="tl-modal-content">
+              <div class="tl-modal-panel">
+                <ng-container *ngIf="seleccionado as libro">
+                  <h1>{{ libro.titulo }}</h1>
+                  <p><strong>Autores:</strong> {{ libro.autores.join(', ') || 'No indicados' }}</p>
+                  <p><strong>Primera publicación:</strong> {{ libro.anio ?? 'No indicada' }}</p>
+                  <ion-button
+                    *ngIf="!estaGuardado(libro)"
+                    expand="block"
+                    color="neutral"
+                    [disabled]="!!errorLocal"
+                    (click)="guardar(libro)"
+                    >Guardar referencia</ion-button
+                  >
+                  <ion-button
+                    expand="block"
+                    color="secondary"
+                    [href]="libro.enlace"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    >Ver en Open Library</ion-button
+                  >
+                  <p>
+                    Abrir la ficha externa requiere internet. Su disponibilidad no garantiza acceso al texto completo.
+                  </p>
+                  <div *ngIf="estaGuardado(libro)" class="tl-destructive-action">
+                    <ion-button expand="block" color="danger" (click)="quitar(libro)">Quitar de guardados</ion-button>
+                  </div>
+                </ng-container>
+              </div>
+            </ion-content>
+          </ng-template>
+        </ion-modal>
+      </ion-col></ion-row
+    >
+  </ion-grid>
+</ion-content>

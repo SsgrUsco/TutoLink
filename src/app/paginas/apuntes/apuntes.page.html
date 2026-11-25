@@ -1,0 +1,259 @@
+<ion-header class="tl-header">
+  <ion-toolbar color="primary"><app-brand /></ion-toolbar>
+</ion-header>
+
+<ion-content>
+  <ion-grid class="tl-page tl-workspace gallery-page">
+    <ion-row class="tl-page-heading">
+      <ion-col size="12">
+        <h1>Apuntes</h1>
+        <p class="gallery-description tl-muted">Consulta tus apuntes desde cualquier dispositivo con tu cuenta.</p>
+      </ion-col>
+    </ion-row>
+
+    <section *ngIf="!usuarioId" class="tl-panel">
+      <p>
+        {{ (auth.comprobando$ | async) ? 'Comprobando tu sesión…' : 'Inicia sesión para guardar y consultar tus
+        apuntes.' }}
+      </p>
+      <ion-button *ngIf="(auth.comprobando$ | async) === false" expand="block" routerLink="/acceso"
+        >Iniciar sesión</ion-button
+      >
+    </section>
+    <p *ngIf="cargando" role="status">Cargando tus apuntes…</p>
+    <section *ngIf="errorCarga" class="tl-panel">
+      <p role="alert">{{ errorCarga }}</p>
+      <ion-button (click)="cargar()" [disabled]="guardando || cargando">Reintentar</ion-button>
+    </section>
+    <section *ngIf="usuarioId" class="tl-panel" aria-label="Mi galería">
+      <div class="tl-panel-heading">
+        <h2 class="tl-panel-title">Mi galería</h2>
+        <ion-button
+          class="tl-icon-button"
+          aria-label="Sincronizar apuntes"
+          title="Sincronizar apuntes"
+          color="secondary"
+          [disabled]="guardando || cargando || !!errorCarga"
+          (click)="cargar()"
+        >
+          <ion-icon slot="icon-only" [icon]="refreshOutline" aria-hidden="true"></ion-icon>
+        </ion-button>
+      </div>
+      <p class="gallery-sync-status" role="status" aria-live="polite">{{ estadoSincronizacion }}</p>
+      <p class="photo-count">{{ fotosFiltradas.length }} de {{ fotos.length }} fotos</p>
+      <ion-row class="gallery-actions">
+        <ion-col>
+          <ion-button expand="block" color="primary" [disabled]="bloqueado" (click)="tomarFotografia()">
+            <ion-icon slot="start" name="camera-outline" aria-hidden="true"> </ion-icon>
+            Tomar foto
+          </ion-button>
+        </ion-col>
+
+        <ion-col>
+          <ion-button expand="block" color="secondary" [disabled]="bloqueado" (click)="elegirDeGaleria()">
+            <ion-icon slot="start" name="images-outline" aria-hidden="true"> </ion-icon>
+            Abrir galería
+          </ion-button>
+        </ion-col>
+      </ion-row>
+
+      <ion-row>
+        <ion-col size="12">
+          <ion-searchbar
+            class="gallery-search"
+            placeholder="Buscar por título"
+            aria-label="Buscar fotos por título"
+            [(ngModel)]="busqueda"
+          >
+          </ion-searchbar>
+
+          @if (puedeOrganizarPorTutoria) {
+          <ion-select
+            class="filtro-tutoria"
+            label="Organizar por tutoría"
+            labelPlacement="stacked"
+            interface="alert"
+            [interfaceOptions]="{ cssClass: 'tl-select-alert' }"
+            cancelText="Cancelar"
+            okText="Seleccionar"
+            [(ngModel)]="filtroTutoria"
+          >
+            <ion-select-option value="todas">Todas las tutorías</ion-select-option>
+            <ion-select-option value="sin">Sin tutoría</ion-select-option>
+            @for (tutoria of opcionesTutorias; track tutoria.id) {
+            <ion-select-option [value]="tutoria.id"
+              >{{ tutoria.materia }} · {{ tutoria.inicio | date: 'dd/MM/yyyy HH:mm' : '-0500' }}</ion-select-option
+            >
+            }
+          </ion-select>
+          <p class="field-hint">Abre un apunte para asignarlo a una tutoría o cambiar su asignación.</p>
+          @if (cargandoTutorias) {
+          <p role="status">Cargando tutorías…</p>
+          } @if (errorTutorias) {
+          <p role="status">{{ errorTutorias }}</p>
+          <ion-button fill="clear" [disabled]="cargandoTutorias" (click)="cargarTutorias()"
+            >Actualizar tutorías</ion-button
+          >
+          } }
+
+          <ion-button
+            class="favorites-filter"
+            expand="block"
+            [color]="soloFavoritas ? 'primary' : 'secondary'"
+            [attr.aria-pressed]="soloFavoritas"
+            (click)="soloFavoritas = !soloFavoritas"
+          >
+            <ion-icon slot="start" [name]="soloFavoritas ? 'star' : 'star-outline'" aria-hidden="true"> </ion-icon>
+            Solo favoritas
+          </ion-button>
+        </ion-col>
+      </ion-row>
+    </section>
+    <ion-row *ngIf="usuarioId && !cargando && !errorCarga && fotos.length === 0">
+      <ion-col size="12">
+        <div class="empty-gallery">
+          <ion-icon name="images-outline" color="primary" aria-hidden="true"> </ion-icon>
+          <h2>Tu galería está vacía</h2>
+          <p>Toma una foto o selecciona una de tu celular.</p>
+        </div>
+      </ion-col>
+    </ion-row>
+
+    <ion-row *ngIf="fotos.length > 0 && fotosFiltradas.length === 0">
+      <ion-col size="12">
+        <p class="gallery-description ion-text-center">No hay fotos que coincidan con los filtros.</p>
+      </ion-col>
+    </ion-row>
+
+    <ion-row>
+      <ion-col *ngFor="let foto of fotosFiltradas" size="6" size-md="4">
+        <ion-card
+          class="photo-card"
+          button
+          [attr.aria-label]="'Abrir ' + foto.titulo + (foto.favorita ? ', favorita' : '')"
+          (click)="abrirFoto(foto)"
+        >
+          <ion-img [src]="foto.ruta" [alt]="foto.titulo"> </ion-img>
+
+          <ion-card-header>
+            <ion-card-subtitle class="photo-title">
+              <ion-icon *ngIf="foto.favorita" name="star" class="favorite-star" aria-hidden="true"> </ion-icon>
+              <span [title]="foto.titulo">{{ foto.titulo }}</span>
+            </ion-card-subtitle>
+            <p *ngIf="puedeOrganizarPorTutoria" class="photo-tutoria">{{ foto.tutoria?.materia || 'Sin tutoría' }}</p>
+          </ion-card-header>
+        </ion-card>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>
+
+<ion-modal class="tl-modal" [isOpen]="modalAbierto" (didDismiss)="cerrarFoto()">
+  <ng-template>
+    <ion-header class="tl-modal-header">
+      <ion-toolbar color="primary"><app-brand /></ion-toolbar>
+      <ion-toolbar color="neutral" class="tl-modal-heading">
+        <ion-title>Detalle del apunte</ion-title>
+
+        <ion-buttons slot="end">
+          <ion-button color="secondary" fill="solid" (click)="cerrarFoto()"> Cerrar </ion-button>
+        </ion-buttons>
+      </ion-toolbar>
+    </ion-header>
+
+    <ion-content class="tl-modal-content">
+      <div class="tl-modal-panel">
+        <div *ngIf="fotoSeleccionada as foto">
+          <ion-img class="full-photo" [src]="foto.ruta" [alt]="foto.titulo"> </ion-img>
+
+          <ion-input
+            class="photo-field"
+            label="Título"
+            labelPlacement="stacked"
+            [maxlength]="limiteTitulo"
+            [(ngModel)]="tituloEditado"
+          >
+          </ion-input>
+
+          <p class="field-hint" aria-live="polite">{{ tituloEditado.length }}/{{ limiteTitulo }}</p>
+
+          <p *ngIf="tituloEditado.trim().length > limiteTitulo" class="field-hint">
+            Acorta el título a {{ limiteTitulo }} caracteres para guardar.
+          </p>
+
+          <p *ngIf="!tituloEditado.trim()" class="gallery-description">Escribe un título para guardar los cambios.</p>
+
+          <ion-textarea
+            class="photo-field"
+            label="Descripción"
+            labelPlacement="stacked"
+            [autoGrow]="true"
+            [maxlength]="limiteDescripcion"
+            [(ngModel)]="descripcionEditada"
+          >
+          </ion-textarea>
+
+          <p class="field-hint" aria-live="polite">{{ descripcionEditada.length }}/{{ limiteDescripcion }}</p>
+
+          @if (puedeOrganizarPorTutoria) {
+          <ion-select
+            class="photo-field"
+            label="Tutoría del apunte"
+            labelPlacement="stacked"
+            interface="alert"
+            [interfaceOptions]="{ cssClass: 'tl-select-alert' }"
+            cancelText="Cancelar"
+            okText="Seleccionar"
+            [disabled]="guardando || cargandoTutorias"
+            [(ngModel)]="tutoriaEditada"
+          >
+            <ion-select-option [value]="null">Sin tutoría</ion-select-option>
+            @if (asignacionAnteriorFueraDeLista) {
+            <ion-select-option [value]="foto.tutoria!.id" [disabled]="true"
+              >{{ foto.tutoria!.materia }} · Asignación anterior</ion-select-option
+            >
+            } @for (tutoria of tutorias; track tutoria.id) {
+            <ion-select-option [value]="tutoria.id"
+              >{{ tutoria.materia }} · {{ tutoria.inicio | date: 'dd/MM/yyyy HH:mm' : '-0500' }}</ion-select-option
+            >
+            }
+          </ion-select>
+          <p class="field-hint assignment-hint">
+            {{ auth.usuarioActual?.rol === 'estudiante' ? 'Puedes elegir tutorías con reserva confirmada.' : 'Puedes
+            elegir tus tutorías publicadas.' }} La asignación se guarda al pulsar Guardar cambios. El apunte sigue
+            siendo privado.
+          </p>
+          }
+
+          <ion-button
+            expand="block"
+            fill="solid"
+            color="secondary"
+            class="ion-margin-top"
+            [attr.aria-pressed]="foto.favorita"
+            [disabled]="guardando"
+            (click)="alternarFavorita()"
+          >
+            <ion-icon slot="start" [name]="foto.favorita ? 'star' : 'star-outline'" aria-hidden="true"> </ion-icon>
+            {{ foto.favorita ? 'Quitar de favoritas' : 'Marcar favorita' }}
+          </ion-button>
+
+          <ion-button
+            expand="block"
+            color="neutral"
+            [disabled]="guardando || !tituloEditado.trim() || tituloEditado.trim().length > limiteTitulo || descripcionEditada.length > limiteDescripcion"
+            (click)="guardarCambios()"
+          >
+            Guardar cambios
+          </ion-button>
+
+          <div class="tl-destructive-action">
+            <ion-button expand="block" color="danger" fill="solid" [disabled]="guardando" (click)="eliminarFoto()">
+              Eliminar apunte
+            </ion-button>
+          </div>
+        </div>
+      </div>
+    </ion-content>
+  </ng-template>
+</ion-modal>

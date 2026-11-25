@@ -1,0 +1,293 @@
+<ion-header class="tl-header">
+  <ion-toolbar color="primary"><app-brand /></ion-toolbar>
+</ion-header>
+<ion-content>
+  <ion-grid class="tl-page tl-workspace">
+    <ion-row class="tl-page-heading"
+      ><ion-col size="12"
+        ><h1>Tutorías</h1>
+        <p class="tl-muted">
+          {{ auth.usuarioActual?.rol === 'tutor' ? 'Publica tus sesiones y consulta tus tutorías.' : 'Encuentra apoyo
+          para tus materias y consulta las sesiones disponibles.' }}
+        </p></ion-col
+      ></ion-row
+    >
+    <ion-row
+      ><ion-col size="12"
+        ><ion-card class="tarjeta-tutorias">
+          @if (esTutor) {
+          <div class="selector-tutor">
+            <ion-segment
+              class="vistas-tutor tl-library-tabs"
+              aria-label="Vista del tutor"
+              [value]="vistaTutor()"
+              (ionChange)="vistaTutor.set($event.detail.value === 'crear' ? 'crear' : 'lista')"
+            >
+              <ion-segment-button value="lista"><ion-label>Mis tutorías</ion-label></ion-segment-button>
+              <ion-segment-button value="crear"><ion-label>Crear tutoría</ion-label></ion-segment-button>
+            </ion-segment>
+          </div>
+          <p class="aviso-publicacion" role="status">{{ avisoPublicacion() }}</p>
+          <div [hidden]="vistaTutor() !== 'crear'">
+            <ion-card-header><ion-card-title>Crear tutoría</ion-card-title></ion-card-header>
+            <ion-card-content>
+              <p>Publica una sesión para los estudiantes de {{ auth.usuarioActual?.facultad }}.</p>
+              <form class="formulario-tutoria" #formulario="ngForm" (ngSubmit)="publicarTutoria()">
+                <fieldset [disabled]="publicando()">
+                  <legend>Nueva tutoría</legend>
+                  <p>Tutor: {{ auth.usuarioActual?.nombre }} · Estado inicial: Programada</p>
+                  <ion-input
+                    label="Materia"
+                    labelPlacement="stacked"
+                    name="materia"
+                    [(ngModel)]="nuevaTutoria.materia"
+                    required
+                    maxlength="100"
+                    [disabled]="publicando()"
+                  />
+                  <ion-grid>
+                    <ion-row>
+                      <ion-col size="12" size-md="6">
+                        <label for="tutoria-inicio">Inicio (hora de Colombia)</label>
+                        <input
+                          id="tutoria-inicio"
+                          type="datetime-local"
+                          name="inicio"
+                          [(ngModel)]="nuevaTutoria.inicio"
+                          required
+                          step="60"
+                        />
+                      </ion-col>
+                      <ion-col size="12" size-md="6">
+                        <label for="tutoria-fin">Fin (hora de Colombia)</label>
+                        <input
+                          id="tutoria-fin"
+                          type="datetime-local"
+                          name="fin"
+                          [(ngModel)]="nuevaTutoria.fin"
+                          required
+                          step="60"
+                        />
+                      </ion-col>
+                    </ion-row>
+                  </ion-grid>
+                  <p>El inicio debe ser futuro y la duración máxima es de 24 horas.</p>
+                  <ion-input
+                    label="Lugar o enlace de reunión"
+                    labelPlacement="stacked"
+                    name="lugar"
+                    [(ngModel)]="nuevaTutoria.lugar"
+                    required
+                    maxlength="150"
+                    [disabled]="publicando()"
+                  />
+                  <ion-input
+                    label="Cupos (1 a 10)"
+                    labelPlacement="stacked"
+                    name="cupos"
+                    type="number"
+                    [(ngModel)]="nuevaTutoria.cupos"
+                    required
+                    min="1"
+                    max="10"
+                    step="1"
+                    [disabled]="publicando()"
+                  />
+                  <div class="acciones">
+                    <ion-button type="submit" [disabled]="publicando() || formulario.invalid"
+                      >{{ publicando() ? 'Publicando…' : 'Publicar tutoría' }}</ion-button
+                    >
+                    <ion-button type="button" color="secondary" [disabled]="publicando()" (click)="cancelarCreacion()"
+                      >Cancelar</ion-button
+                    >
+                  </div>
+                </fieldset>
+                @if (errorCreacion()) {
+                <p role="alert">{{ errorCreacion() }}</p>
+                }
+              </form>
+            </ion-card-content>
+          </div>
+          }
+          <div [hidden]="esTutor && vistaTutor() !== 'lista'">
+            <ion-card-header>
+              <div class="tl-panel-heading">
+                <ion-card-title>{{ esTutor ? 'Mis tutorías' : 'Encuentra tu próxima tutoría' }}</ion-card-title>
+                <ion-button
+                  class="tl-icon-button"
+                  color="secondary"
+                  [disabled]="cargando"
+                  (click)="cargar()"
+                  aria-label="Actualizar tutorías"
+                  title="Actualizar tutorías"
+                >
+                  <ion-icon slot="icon-only" [icon]="refreshOutline" aria-hidden="true"></ion-icon>
+                </ion-button>
+              </div>
+            </ion-card-header>
+            <ion-card-content>
+              <p>
+                {{ esTutor ? 'Consulta tus sesiones publicadas, sus horarios y cupos disponibles.' : 'Consulta la
+                materia, conoce al tutor y revisa el horario antes de reservar.' }}
+              </p>
+              <ng-container *ngIf="auth.usuario$ | async as usuario">
+                <p *ngIf="usuario.facultad">Tutorías de {{ usuario.facultad }}.</p>
+              </ng-container>
+              <ion-grid class="tl-tutoria-filtros">
+                <ion-row class="tl-busqueda-fila">
+                  <ion-col>
+                    <ion-searchbar
+                      [(ngModel)]="busqueda"
+                      [placeholder]="esTutor ? 'Buscar en mis materias' : 'Buscar materia o tutor'"
+                      [attr.aria-label]="esTutor ? 'Buscar en mis materias' : 'Buscar materia o tutor'"
+                      [maxlength]="100"
+                    ></ion-searchbar>
+                  </ion-col>
+                </ion-row>
+                <ion-row class="tl-estado-fila" [class.filtro-solo]="esTutor">
+                  <ion-col>
+                    <ion-select
+                      label="Estado"
+                      labelPlacement="stacked"
+                      class="selector-estado"
+                      interface="popover"
+                      [interfaceOptions]="{ cssClass: 'tl-select-popover' }"
+                      [(ngModel)]="estado"
+                    >
+                      <ion-select-option value="todas">Todos</ion-select-option>
+                      <ion-select-option value="programada">Programadas</ion-select-option>
+                      <ion-select-option value="finalizada">Finalizadas</ion-select-option>
+                      <ion-select-option value="cancelada">Canceladas</ion-select-option>
+                    </ion-select>
+                  </ion-col>
+                  <ion-col *ngIf="!esTutor">
+                    <ion-button
+                      *ngIf="auth.usuario$ | async"
+                      expand="block"
+                      [color]="soloMisReservas ? 'primary' : 'secondary'"
+                      [attr.aria-pressed]="soloMisReservas"
+                      (click)="soloMisReservas = !soloMisReservas"
+                      >{{ soloMisReservas ? 'Ver todas' : 'Mis reservas' }}</ion-button
+                    >
+                  </ion-col>
+                </ion-row>
+              </ion-grid>
+              <p *ngIf="cargando" role="status">
+                {{ esTutor ? 'Consultando tus tutorías…' : 'Consultando las tutorías publicadas…' }}
+              </p>
+              <p *ngIf="error" role="alert">{{ error }}</p>
+              <ng-container *ngIf="servicioDisponible">
+                <p aria-live="polite">
+                  {{ filtradas.length }} de {{ tutorias.length }} tutorías · {{ programadas }} programadas
+                </p>
+                <div *ngIf="tutorias.length === 0" class="estado-vacio">
+                  <h2>{{ esTutor ? 'Aún no has publicado tutorías' : 'Aún no hay tutorías publicadas' }}</h2>
+                  <p>
+                    {{ esTutor ? 'Usa Crear tutoría para publicar tu primera sesión.' : 'Vuelve más adelante para
+                    consultar nuevas sesiones.' }}
+                  </p>
+                </div>
+                <div *ngIf="tutorias.length > 0 && filtradas.length === 0" class="estado-vacio">
+                  <h2>No encontramos coincidencias</h2>
+                  <p>Prueba con otra materia o cambia el estado.</p>
+                  <ion-button fill="clear" (click)="limpiarFiltros()">Limpiar filtros</ion-button>
+                </div>
+                <ion-list>
+                  <ion-item *ngFor="let tutoria of filtradas" [button]="true" [detail]="true" (click)="abrir(tutoria)">
+                    <ion-label class="ion-text-wrap">
+                      <h2>{{ tutoria.materia }}</h2>
+                      <p>Tutor: {{ tutoria.tutor }}</p>
+                      <p *ngIf="tutoria.facultad">{{ tutoria.facultad }}</p>
+                      <p>{{ tutoria.inicio | date: 'dd/MM/yyyy · HH:mm' : '-0500' }} · {{ tutoria.lugar }}</p>
+                      <p>
+                        {{ tutoria.cuposDisponibles > 0 ? tutoria.cuposDisponibles + ' cupos disponibles' : 'Sin cupos'
+                        }}
+                      </p>
+                      <ion-badge [color]="colorEstado(tutoria.estado)">{{ tutoria.estado | titlecase }}</ion-badge>
+                      <ion-badge *ngIf="reservada(tutoria.id)" color="primary">Mi reserva</ion-badge>
+                    </ion-label>
+                  </ion-item>
+                </ion-list>
+              </ng-container>
+            </ion-card-content>
+          </div>
+        </ion-card>
+        <ion-modal class="tl-modal" [isOpen]="modalAbierto" (didDismiss)="modalAbierto = false">
+          <ng-template>
+            <ion-header class="tl-modal-header">
+              <ion-toolbar color="primary"><app-brand /></ion-toolbar
+              ><ion-toolbar color="neutral" class="tl-modal-heading"
+                ><ion-title>Detalle de tutoría</ion-title
+                ><ion-buttons slot="end"
+                  ><ion-button color="secondary" fill="solid" (click)="modalAbierto = false"
+                    >Cerrar</ion-button
+                  ></ion-buttons
+                ></ion-toolbar
+              ></ion-header
+            >
+            <ion-content class="tl-modal-content">
+              <div class="tl-modal-panel">
+                <ng-container *ngIf="seleccionada as tutoria">
+                  <h1>{{ tutoria.materia }}</h1>
+                  <ion-badge [color]="colorEstado(tutoria.estado)">{{ tutoria.estado | titlecase }}</ion-badge>
+                  <ion-list>
+                    <ion-item
+                      ><ion-label class="ion-text-wrap"
+                        ><h2>Tutor</h2>
+                        <p>{{ tutoria.tutor }}</p></ion-label
+                      ></ion-item
+                    >
+                    <ion-item
+                      ><ion-label
+                        ><h2>Inicio</h2>
+                        <p>{{ tutoria.inicio | date: 'dd/MM/yyyy · HH:mm' : '-0500' }}</p></ion-label
+                      ></ion-item
+                    >
+                    <ion-item
+                      ><ion-label
+                        ><h2>Fin</h2>
+                        <p>{{ tutoria.fin | date: 'dd/MM/yyyy · HH:mm' : '-0500' }}</p></ion-label
+                      ></ion-item
+                    >
+                    <ion-item
+                      ><ion-label class="ion-text-wrap"
+                        ><h2>Lugar</h2>
+                        <p>{{ tutoria.lugar }}</p></ion-label
+                      ></ion-item
+                    >
+                    <ion-item
+                      ><ion-label
+                        ><h2>Cupos disponibles</h2>
+                        <p>{{ tutoria.cuposDisponibles }}</p></ion-label
+                      ></ion-item
+                    >
+                  </ion-list>
+                  <p class="tl-muted">Horarios de Colombia (UTC−5).</p>
+                  <p *ngIf="reservada(tutoria.id)">Tienes un cupo reservado en esta tutoría.</p>
+                  <p *ngIf="!futura(tutoria)">
+                    Las reservas y cancelaciones se permiten únicamente antes del inicio de una tutoría programada.
+                  </p>
+                  <ion-button
+                    *ngIf="!esTutor && (auth.usuario$ | async) && futura(tutoria)"
+                    expand="block"
+                    [color]="reservada(tutoria.id) ? 'danger' : 'neutral'"
+                    [class.tl-destructive-button]="reservada(tutoria.id)"
+                    [disabled]="
+              guardando() ||
+              cargando ||
+              !servicioDisponible ||
+              (!reservada(tutoria.id) && tutoria.cuposDisponibles === 0)
+            "
+                    (click)="cambiarReserva(tutoria)"
+                  >
+                    {{ guardando() ? 'Procesando…' : reservada(tutoria.id) ? 'Cancelar mi reserva' : 'Reservar cupo' }}
+                  </ion-button>
+                </ng-container>
+              </div>
+            </ion-content>
+          </ng-template>
+        </ion-modal>
+      </ion-col></ion-row
+    >
+  </ion-grid>
+</ion-content>

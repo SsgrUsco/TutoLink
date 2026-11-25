@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">TutoLink</string>
+    <string name="title_activity_main">TutoLink</string>
+    <string name="package_name">co.edu.usco.appnativa</string>
+    <string name="custom_url_scheme">co.edu.usco.appnativa</string>
+</resources>

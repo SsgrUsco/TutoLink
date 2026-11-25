@@ -1,0 +1,49 @@
+<ion-header class="tl-header">
+  <ion-toolbar color="primary"><app-brand /></ion-toolbar>
+</ion-header>
+<ion-content>
+  <ion-grid class="tl-page tl-workspace">
+    <ion-row class="tl-page-heading"
+      ><ion-col size="12"
+        ><h1>Mi perfil</h1>
+        <p class="tl-muted">Tu información académica y tu sesión.</p></ion-col
+      ></ion-row
+    >
+    <ion-row
+      ><ion-col size="12">
+        <p *ngIf="auth.comprobando$ | async" role="status">Comprobando sesión…</p>
+        <div *ngIf="auth.aviso$ | async as aviso">
+          <p role="status">{{ aviso }}</p>
+          <ion-button fill="clear" [disabled]="auth.comprobando$ | async" (click)="auth.restaurar()"
+            >Reintentar conexión</ion-button
+          >
+        </div>
+        <ion-card>
+          <ion-card-header><ion-card-title>Mi cuenta</ion-card-title></ion-card-header>
+          <ion-card-content>
+            <ng-container *ngIf="auth.usuario$ | async as usuario">
+              <h2 class="tl-profile-name">{{ usuario.nombre }}</h2>
+              <dl class="tl-profile-data">
+                <div>
+                  <dt>Correo</dt>
+                  <dd>{{ usuario.correo }}</dd>
+                </div>
+                <div>
+                  <dt>Facultad</dt>
+                  <dd>{{ usuario.facultad || 'Sin asignar' }}</dd>
+                </div>
+                <div>
+                  <dt>Rol</dt>
+                  <dd>{{ usuario.rol | titlecase }}</dd>
+                </div>
+              </dl>
+              <ion-button color="primary" fill="outline" expand="block" (click)="auth.cerrar()" routerLink="/acceso"
+                >Cerrar sesión</ion-button
+              >
+            </ng-container>
+          </ion-card-content>
+        </ion-card>
+      </ion-col></ion-row
+    >
+  </ion-grid>
+</ion-content>

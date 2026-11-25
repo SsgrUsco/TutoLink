@@ -1,0 +1,116 @@
+const fs = require('node:fs');
+const assert = require('node:assert/strict');
+const { initializeTestEnvironment, assertFails, assertSucceeds } = require('@firebase/rules-unit-testing');
+const { doc, setDoc, getDoc, getDocs, collection, query, where, updateDoc, runTransaction, serverTimestamp, Timestamp } = require('firebase/firestore');
+
+(async () => {
+  const env = await initializeTestEnvironment({ projectId: 'demo-tutolink', firestore: { rules: fs.readFileSync('firebase/firestore.rules', 'utf8') } });
+  const a = env.authenticatedContext('a', { email: 'a@usco.edu.co' }).firestore();
+  const b = env.authenticatedContext('b', { email: 'b@usco.edu.co' }).firestore();
+  const c = env.authenticatedContext('c', { email: 'c@usco.edu.co' }).firestore();
+  const anon = env.unauthenticatedContext().firestore();
+  const future = Timestamp.fromMillis(Date.now() + 86400000);
+  async function seed() {
+    await env.clearFirestore();
+    await env.withSecurityRulesDisabled(async ctx => {
+      const db = ctx.firestore();
+      for (const id of [1,2]) await setDoc(doc(db, 'facultades', String(id)), { nombre: 'Facultad ' + id });
+      for (const uid of ['a','b','c']) await setDoc(doc(db, 'usuarios', uid), { nombre: uid, correo: uid+'@usco.edu.co', rol:'estudiante',facultadId:uid==='c'?2:1 });
+      for (const id of [1,2,3]) await setDoc(doc(db,'tutorias',String(id)), { materia:'Materia',facultadId:id===3?2:1,estado:'programada',inicio:future,fin:Timestamp.fromMillis(future.toMillis()+3600000),cupos:1,cuposDisponibles:1,bloques:['hora-1'] });
+    });
+  }
+  async function reserve(db,uid,id,cancel=false) {
+    return runTransaction(db, async tx => {
+      const tRef=doc(db,'tutorias',String(id)), rRef=doc(db,'usuarios',uid,'reservas',String(id)), aRef=doc(db,'agendas',uid);
+      const [t,agenda,r]=await Promise.all([tx.get(tRef),tx.get(aRef),tx.get(rRef)]);
+      const blocks=agenda.data()?.bloques??[], slots=t.data().bloques;
+      tx.set(rRef,{tutoriaId:id,estado:cancel?'cancelada':'confirmada',actualizada:serverTimestamp()});
+      tx.set(aRef,{ultimaTutoriaId:id,bloques:cancel?blocks.filter(b=>!slots.includes(b)):[...blocks,...slots]});
+      tx.update(tRef,{cuposDisponibles:t.data().cuposDisponibles+(cancel?1:-1),ultimaReservaUid:uid});
+    });
+  }
+  try {
+    await seed();
+    await assertSucceeds(getDocs(collection(anon,'facultades')));
+    await assertFails(getDocs(collection(anon,'tutorias')));
+    await assertFails(getDoc(doc(anon,'usuarios','a')));
+    await assertFails(getDoc(doc(a,'usuarios','b')));
+    await assertFails(getDocs(collection(a,'tutorias')));
+    await assertSucceeds(getDocs(query(collection(a,'tutorias'),where('facultadId','==',1))));
+    const nuevo=env.authenticatedContext('nuevo',{email:'nuevo@usco.edu.co'}).firestore();
+    const profile={nombre:'Nuevo estudiante',correo:'nuevo@usco.edu.co',rol:'estudiante',facultadId:1,creado_en:serverTimestamp()};
+    await assertFails(setDoc(doc(nuevo,'usuarios','nuevo'),{...profile,rol:'admin'}));
+    await assertFails(setDoc(doc(nuevo,'usuarios','nuevo'),{...profile,facultadId:99}));
+    await assertFails(setDoc(doc(nuevo,'usuarios','nuevo'),{...profile,correo:'otro@usco.edu.co'}));
+    await assertSucceeds(setDoc(doc(nuevo,'usuarios','nuevo'),profile));
+    await assertFails(updateDoc(doc(nuevo,'usuarios','nuevo'),{facultadId:2}));
+    await assertFails(updateDoc(doc(nuevo,'usuarios','nuevo'),{rol:'tutor'}));
+    const tutor=env.authenticatedContext('tutor',{email:'tutor@usco.edu.co'}).firestore();
+    await assertSucceeds(setDoc(doc(tutor,'usuarios','tutor'),{nombre:'Tutor de prueba',correo:'tutor@usco.edu.co',rol:'tutor',facultadId:1,creado_en:serverTimestamp()}));
+    const sesion={materia:'Álgebra',tutor:'Tutor de prueba',tutorUid:'tutor',facultadId:1,facultad:'Facultad 1',inicio:future,fin:Timestamp.fromMillis(future.toMillis()+3600000),lugar:'Sala 2',cupos:5,cuposDisponibles:5,estado:'programada',bloques:['hora-2'],creado_en:serverTimestamp()};
+    await assertSucceeds(getDoc(doc(tutor,'tutorias','100')));
+    await assertFails(setDoc(doc(a,'tutorias','100'),{...sesion,tutorUid:'a',tutor:'a'}));
+    await assertFails(setDoc(doc(anon,'tutorias','100'),sesion));
+    await assertFails(setDoc(doc(tutor,'tutorias','100'),{...sesion,tutorUid:'a'}));
+    await assertFails(setDoc(doc(tutor,'tutorias','100'),{...sesion,facultadId:2,facultad:'Facultad 2'}));
+    await assertFails(setDoc(doc(tutor,'tutorias','100'),{...sesion,cupos:0,cuposDisponibles:0}));
+    await assertFails(setDoc(doc(tutor,'tutorias','101'),{...sesion,cupos:11,cuposDisponibles:11}));
+    await assertSucceeds(setDoc(doc(tutor,'tutorias','101'),{...sesion,cupos:10,cuposDisponibles:10}));
+    await assertFails(setDoc(doc(tutor,'tutorias','100'),{...sesion,fin:future}));
+    await assertFails(setDoc(doc(tutor,'tutorias','100'),{...sesion,estado:'finalizada'}));
+    await assertSucceeds(setDoc(doc(tutor,'tutorias','100'),sesion));
+    await assertSucceeds(getDoc(doc(a,'tutorias','100')));
+    await assertFails(getDoc(doc(c,'tutorias','100')));
+    await assertFails(updateDoc(doc(tutor,'tutorias','100'),{materia:'Cambio'}));
+    await assertFails(reserve(tutor,'tutor',100));
+    await assertSucceeds(reserve(a,'a',100));
+    await assertSucceeds(reserve(a,'a',100,true));
+    console.log('PASS: registro de tutor, creación, autoría, facultad, validación y reservas de estudiantes.');
+    await assertFails(updateDoc(doc(a,'tutorias','1'),{cuposDisponibles:0,ultimaReservaUid:'a'}));
+    await assertFails(setDoc(doc(a,'usuarios','a','reservas','1'),{tutoriaId:1,estado:'confirmada',actualizada:serverTimestamp()}));
+    await assertFails(reserve(c,'c',1));
+    await assertSucceeds(reserve(a,'a',1));
+    await assertFails(reserve(a,'a',1));
+    await assertFails(reserve(a,'a',2));
+    await assertFails(reserve(b,'b',1));
+    await assertFails(setDoc(doc(a,'agendas','a'),{ultimaTutoriaId:1,bloques:[]}));
+    await assertSucceeds(reserve(a,'a',1,true));
+    await assertFails(reserve(a,'a',1,true));
+    await assertSucceeds(reserve(b,'b',1));
+    await assertFails(getDocs(collection(a,'usuarios','b','reservas')));
+    const photoId = '12345678-abcd-abcd-abcd-123456789abc';
+    const photoRef = doc(a, 'usuarios', 'a', 'apuntes', photoId);
+    const photo = {id:photoId,titulo:'Apunte',descripcion:'Clase',favorita:false,formato:'jpeg',creada:Date.now(),imagen:'data:image/jpeg;base64,/9j/AA==',eliminado:false,actualizada:serverTimestamp()};
+    await assertSucceeds(setDoc(photoRef,photo));
+    const asociacion={id:2,materia:'Materia',inicio:'2026-11-23T15:00:00.000Z'};
+    await assertFails(setDoc(photoRef,{...photo,tutoria:asociacion}));
+    await assertFails(setDoc(photoRef,{...photo,tutoria:{...asociacion,id:1}}));
+    await assertSucceeds(reserve(a,'a',2));
+    await assertSucceeds(setDoc(photoRef,{...photo,tutoria:asociacion}));
+    await assertSucceeds(reserve(a,'a',2,true));
+    await assertSucceeds(setDoc(photoRef,{...photo,descripcion:'Histórico',tutoria:asociacion}));
+    const tutorPhotoRef=doc(tutor,'usuarios','tutor','apuntes',photoId);
+    await assertSucceeds(setDoc(tutorPhotoRef,{...photo,tutoria:{...asociacion,id:100,materia:'Álgebra'}}));
+    await assertFails(setDoc(tutorPhotoRef,{...photo,tutoria:asociacion}));
+    await assertFails(setDoc(photoRef,{...photo,tutoria:{...asociacion,id:3}}));
+    await assertFails(setDoc(photoRef,{...photo,tutoria:{...asociacion,id:99999}}));
+    await assertFails(setDoc(photoRef,{...photo,tutoria:{...asociacion,materia:'Inventada'}}));
+    await assertSucceeds(setDoc(photoRef,photo));
+    await assertSucceeds(getDocs(collection(a,'usuarios','a','apuntes')));
+    await assertFails(getDoc(doc(b,'usuarios','a','apuntes',photoId)));
+    await assertFails(getDocs(collection(anon,'usuarios','a','apuntes')));
+    await assertFails(setDoc(doc(b,'usuarios','a','apuntes',photoId),photo));
+    await assertFails(setDoc(photoRef,{...photo,imagen:'data:image/jpeg;base64,'+'A'.repeat(600000)}));
+    await assertFails(setDoc(photoRef,{...photo,titulo:'A'.repeat(19)}));
+    await assertFails(setDoc(photoRef,{...photo,descripcion:'A'.repeat(51)}));
+    await assertFails(setDoc(photoRef,{...photo,imagen:'https://example.com/photo.jpg'}));
+    await assertSucceeds(setDoc(photoRef,{id:photoId,eliminado:true,actualizada:serverTimestamp()}));
+    await assertFails(setDoc(photoRef,photo));
+    console.log('PASS: apuntes privados, tamaño, campos y prevención de resurrección.');
+    await seed();
+    const concurrent = await Promise.allSettled([reserve(a,'a',1),reserve(b,'b',1)]);
+    assert.equal(concurrent.filter(r=>r.status==='fulfilled').length,1);
+    assert.equal((await getDoc(doc(a,'tutorias','1'))).data().cuposDisponibles,0);
+    console.log('PASS: perfiles, facultades, privacidad, reservas atómicas, duplicados, horarios, cancelación y último cupo concurrente.');
+  } finally { await env.cleanup(); }
+})().catch(e=>{console.error(e);process.exitCode=1;});

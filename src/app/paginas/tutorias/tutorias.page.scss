@@ -1,0 +1,79 @@
+.estado-vacio {
+  text-align: center;
+  padding: 24px 12px;
+  color: var(--gallery-muted);
+}
+.estado-vacio h2 {
+  font-size: 20px;
+  color: var(--gallery-text);
+}
+.selector-tutor {
+  padding: 20px 20px 0;
+}
+.selector-tutor .vistas-tutor {
+  margin: 0;
+}
+.vistas-tutor ion-segment-button {
+  min-height: 48px;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.aviso-publicacion {
+  margin: 16px 20px 0;
+  padding: 12px;
+  background: var(--gallery-background);
+  border-radius: var(--tl-control-radius);
+}
+.aviso-publicacion:empty {
+  display: none;
+}
+@media (max-width: 600px) {
+  .selector-tutor {
+    padding: 16px 16px 0;
+  }
+}
+
+.formulario-tutoria {
+  fieldset {
+    border: 0;
+    padding: 0;
+    margin: 0;
+    min-width: 0;
+  }
+  legend {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  label {
+    display: block;
+    margin-bottom: 8px;
+    font-size: 12px;
+    color: var(--gallery-muted);
+  }
+  input {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 56px;
+    min-width: 0;
+    padding: 12px;
+    border: 1px solid var(--gallery-border);
+    border-radius: var(--tl-control-radius);
+    background: var(--gallery-background);
+    color: var(--gallery-text);
+    font: inherit;
+  }
+  .acciones {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-top: 16px;
+  }
+  .acciones ion-button { flex: 1 1 140px; margin: 0; }
+  ion-grid { padding: 0; margin: 16px 0; }
+  ion-row { gap: 16px; }
+  ion-col { padding: 0; flex: 1 1 240px; max-width: 100%; }
+  input:focus-visible { outline: 2px solid var(--ion-color-neutral); outline-offset: 2px; }
+  [role='alert'] {
+    color: var(--ion-color-danger);
+  }
+}

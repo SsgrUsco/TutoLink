@@ -1,0 +1,142 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function own(uid) { return signedIn() && request.auth.uid == uid; }
+    function profile(uid) { return get(/databases/$(database)/documents/usuarios/$(uid)).data; }
+    function sessionPath(id) { return /databases/$(database)/documents/tutorias/$(string(id)); }
+    function bookingPath(uid,id) { return /databases/$(database)/documents/usuarios/$(uid)/reservas/$(string(id)); }
+    function agendaPath(uid) { return /databases/$(database)/documents/agendas/$(uid); }
+    function oldState(uid,id) { return exists(bookingPath(uid,id)) ? get(bookingPath(uid,id)).data.estado : 'cancelada'; }
+    function oldBlocks(uid) { return exists(agendaPath(uid)) ? get(agendaPath(uid)).data.bloques : []; }
+    function eligible(uid,t) {
+      return own(uid) && profile(uid).rol == 'estudiante' && profile(uid).facultadId == t.facultadId
+        && t.estado == 'programada' && t.inicio > request.time;
+    }
+    function reservationTransition(uid,id) {
+      let t = get(sessionPath(id)).data;
+      let after = getAfter(sessionPath(id)).data;
+      let previous = oldState(uid,id);
+      let next = getAfter(bookingPath(uid,id)).data;
+      let agenda = getAfter(agendaPath(uid)).data;
+      let occupied = oldBlocks(uid);
+      return eligible(uid,t)
+        && next.tutoriaId == id && next.actualizada == request.time
+        && after.ultimaReservaUid == uid && agenda.ultimaTutoriaId == id
+        && (
+          (previous == 'cancelada' && next.estado == 'confirmada'
+            && t.cuposDisponibles > 0 && after.cuposDisponibles == t.cuposDisponibles - 1
+            && !occupied.hasAny(t.bloques)
+            && agenda.bloques == occupied.concat(t.bloques))
+          || (previous == 'confirmada' && next.estado == 'cancelada'
+            && t.cuposDisponibles < t.cupos && after.cuposDisponibles == t.cuposDisponibles + 1
+            && agenda.bloques == occupied.removeAll(t.bloques))
+        );
+    }
+    match /facultades/{id} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /usuarios/{uid} {
+      allow read: if own(uid);
+      allow create: if own(uid)
+        && request.resource.data.keys().hasOnly(['nombre','correo','facultadId','rol','creado_en'])
+        && request.resource.data.nombre is string && request.resource.data.nombre.size() >= 3 && request.resource.data.nombre.size() <= 100
+        && request.resource.data.correo == request.auth.token.email
+        && request.resource.data.correo.matches('^[a-zA-Z0-9._%+-]+@usco[.]edu[.]co$')
+        && request.resource.data.rol in ['estudiante', 'tutor']
+        && request.resource.data.facultadId is int
+        && exists(/databases/$(database)/documents/facultades/$(string(request.resource.data.facultadId)))
+        && request.resource.data.creado_en == request.time;
+      allow update, delete: if false;
+      match /apuntes/{id} {
+        function validTutoriaApunte(d) {
+          return !('tutoria' in d) || (
+            d.tutoria is map && d.tutoria.keys().hasOnly(['id','materia','inicio'])
+            && d.tutoria.id is int && d.tutoria.id > 0
+            && d.tutoria.materia is string && d.tutoria.materia.size() > 0 && d.tutoria.materia.size() <= 100
+            && d.tutoria.inicio is string && d.tutoria.inicio.size() == 24
+            && get(sessionPath(d.tutoria.id)).data.facultadId == profile(uid).facultadId
+            && d.tutoria.materia == get(sessionPath(d.tutoria.id)).data.materia
+            && (
+              (resource != null && 'tutoria' in resource.data && d.tutoria == resource.data.tutoria)
+              || (profile(uid).rol == 'estudiante' && oldState(uid,d.tutoria.id) == 'confirmada')
+              || (profile(uid).rol == 'tutor' && get(sessionPath(d.tutoria.id)).data.tutorUid == uid)
+            )
+          );
+        }
+        function validPhoto() {
+          let d = request.resource.data;
+          return d.keys().hasOnly(['id','titulo','descripcion','favorita','formato','creada','imagen','eliminado','actualizada','tutoria'])
+            && validTutoriaApunte(d)
+            && d.titulo is string && d.titulo.size() > 0 && d.titulo.size() <= 18
+            && d.descripcion is string && d.descripcion.size() <= 50
+            && d.favorita is bool && d.formato == 'jpeg'
+            && d.creada is number && d.creada > 0
+            && d.imagen is string && d.imagen.size() <= 600000
+            && d.imagen.matches('^data:image/jpeg;base64,[A-Za-z0-9+/=]+$')
+            && d.eliminado == false;
+        }
+        function validWrite() {
+          let d = request.resource.data;
+          return own(uid) && id.matches('^[0-9a-f-]{36}$') && d.id == id
+            && d.actualizada == request.time
+            && (d.eliminado == true ? d.keys().hasOnly(['id','eliminado','actualizada']) : validPhoto());
+        }
+        allow read: if own(uid);
+        allow create: if validWrite();
+        allow update: if validWrite() && (resource.data.eliminado == false || request.resource.data.eliminado == true);
+        allow delete: if false;
+      }
+      match /reservas/{id} {
+        allow read: if own(uid);
+        allow create, update: if own(uid)
+          && request.resource.data.keys().hasOnly(['tutoriaId','estado','actualizada'])
+          && request.resource.data.tutoriaId is int && string(request.resource.data.tutoriaId) == id
+          && reservationTransition(uid, request.resource.data.tutoriaId);
+        allow delete: if false;
+      }
+    }
+    match /tutorias/{id} {
+      function validTutoria() {
+        let d = request.resource.data;
+        let p = profile(request.auth.uid);
+        return p.rol == 'tutor'
+          && id.matches('^[1-9][0-9]{0,15}$')
+          && d.keys().hasOnly(['materia','tutor','tutorUid','facultadId','facultad','inicio','fin','lugar','cupos','cuposDisponibles','estado','bloques','creado_en'])
+          && d.tutorUid == request.auth.uid && d.tutor == p.nombre
+          && d.facultadId == p.facultadId
+          && d.facultad == get(/databases/$(database)/documents/facultades/$(string(p.facultadId))).data.nombre
+          && d.materia is string && d.materia.size() > 0 && d.materia.size() <= 100
+          && d.lugar is string && d.lugar.size() > 0 && d.lugar.size() <= 150
+          && d.inicio is timestamp && d.fin is timestamp
+          && d.inicio > request.time && d.fin > d.inicio
+          && d.fin - d.inicio <= duration.value(24, 'h')
+          && d.cupos is int && d.cupos >= 1 && d.cupos <= 10
+          && d.cuposDisponibles == d.cupos && d.estado == 'programada'
+          && d.bloques is list && d.bloques.size() > 0 && d.bloques.size() <= 1440
+          && d.creado_en == request.time;
+      }
+      allow get: if signedIn() && (!exists(/databases/$(database)/documents/tutorias/$(id))
+        ? profile(request.auth.uid).rol == 'tutor'
+        : resource.data.facultadId == profile(request.auth.uid).facultadId);
+      allow list: if signedIn() && resource.data.facultadId == profile(request.auth.uid).facultadId;
+      allow create: if signedIn() && validTutoria();
+      allow update: if signedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['cuposDisponibles','ultimaReservaUid'])
+        && request.resource.data.cuposDisponibles is int
+        && request.resource.data.cuposDisponibles >= 0 && request.resource.data.cuposDisponibles <= resource.data.cupos
+        && reservationTransition(request.auth.uid, int(id));
+      allow delete: if false;
+    }
+    match /agendas/{uid} {
+      allow read: if own(uid);
+      allow create, update: if own(uid)
+        && request.resource.data.keys().hasOnly(['bloques','ultimaTutoriaId'])
+        && request.resource.data.bloques is list && request.resource.data.ultimaTutoriaId is int
+        && reservationTransition(uid, request.resource.data.ultimaTutoriaId);
+      allow delete: if false;
+    }
+    match /{document=**} { allow read, write: if false; }
+  }
+}

@@ -1,0 +1,140 @@
+<ion-header class="tl-header">
+  <ion-toolbar color="primary"><app-brand /></ion-toolbar>
+</ion-header>
+<ion-content>
+  <ion-grid class="tl-page tl-workspace tl-access">
+    <ion-row class="ion-align-items-center">
+      <ion-col size="12" size-md="6">
+        <div class="tl-intro">
+          <p class="tl-eyebrow">UNIVERSIDAD SURCOLOMBIANA</p>
+          <h1>Aprender es mejor<br />en compañía.</h1>
+          <p>Encuentra tutorías, consulta material de estudio y organiza tus apuntes en un solo lugar.</p>
+        </div>
+      </ion-col>
+      <ion-col size="12" size-md="6">
+        <ion-card>
+          <ion-card-header
+            ><ion-card-title
+              >{{ registro ? 'Crea tu cuenta' : 'Bienvenido a TutoLink' }}</ion-card-title
+            ></ion-card-header
+          >
+          <ion-card-content>
+            <p>{{ registro ? 'Completa tus datos y elige tu rol.' : 'Ingresa con tu correo institucional.' }}</p>
+            <p *ngIf="auth.comprobando$ | async" aria-live="polite">Comprobando sesión…</p>
+            <p *ngIf="auth.aviso$ | async as aviso" role="status">{{ aviso }}</p>
+            <ion-button *ngIf="auth.usuario$ | async" expand="block" color="secondary" routerLink="/tutolink"
+              >Continuar con mi sesión</ion-button
+            >
+            <form (ngSubmit)="enviar()">
+              <ng-container *ngIf="registro">
+                <ion-select
+                  label="Rol"
+                  labelPlacement="stacked"
+                  name="rol"
+                  interface="alert"
+                  [interfaceOptions]="{ cssClass: 'tl-select-alert', header: 'Elige tu rol' }"
+                  cancelText="Cancelar"
+                  okText="Seleccionar"
+                  required
+                  [(ngModel)]="datos.rol"
+                >
+                  <ion-select-option value="estudiante">Estudiante — reservar tutorías</ion-select-option>
+                  <ion-select-option value="tutor">Tutor — crear tutorías</ion-select-option>
+                </ion-select>
+                <ion-input
+                  label="Nombre completo"
+                  labelPlacement="stacked"
+                  name="nombre"
+                  autocomplete="name"
+                  maxlength="100"
+                  required
+                  [(ngModel)]="datos.nombre"
+                ></ion-input>
+                <ion-select
+                  label="Facultad"
+                  labelPlacement="stacked"
+                  name="facultad"
+                  placeholder="Selecciona tu facultad"
+                  interface="alert"
+                  [interfaceOptions]="{ header: 'Selecciona tu facultad', cssClass: 'tl-select-alert' }"
+                  cancelText="Cancelar"
+                  okText="Seleccionar"
+                  required
+                  [disabled]="cargandoFacultades || !facultades.length"
+                  [(ngModel)]="datos.facultadId"
+                >
+                  <ion-select-option *ngFor="let facultad of facultades" [value]="facultad.id"
+                    >{{ facultad.nombre }}</ion-select-option
+                  >
+                </ion-select>
+                <p *ngIf="cargandoFacultades" role="status">Cargando facultades…</p>
+                <div *ngIf="errorFacultades">
+                  <p role="alert">{{ errorFacultades }}</p>
+                  <ion-button fill="clear" (click)="cargarFacultades()">Reintentar</ion-button>
+                </div>
+              </ng-container>
+              <ion-input
+                label="Correo institucional"
+                labelPlacement="stacked"
+                name="correo"
+                type="email"
+                autocomplete="username"
+                maxlength="150"
+                required
+                [(ngModel)]="datos.correo"
+              ></ion-input>
+              <ion-input
+                label="Contraseña"
+                labelPlacement="stacked"
+                name="contrasena"
+                [type]="verContrasena ? 'text' : 'password'"
+                [autocomplete]="registro ? 'new-password' : 'current-password'"
+                maxlength="30"
+                required
+                [(ngModel)]="datos.contrasena"
+              >
+                <ion-button
+                  slot="end"
+                  type="button"
+                  fill="clear"
+                  class="password-toggle"
+                  [attr.aria-label]="verContrasena ? 'Ocultar contraseña' : 'Mostrar contraseña'"
+                  [attr.aria-pressed]="verContrasena"
+                  (click)="verContrasena = !verContrasena"
+                >
+                  <ion-icon
+                    slot="icon-only"
+                    [icon]="verContrasena ? eyeOffOutline : eyeOutline"
+                    aria-hidden="true"
+                  ></ion-icon>
+                </ion-button>
+              </ion-input>
+              <ng-container *ngIf="registro">
+                <p class="tl-muted">De 8 a 30 caracteres, con mayúscula, minúscula y número.</p>
+                <ion-input
+                  label="Confirmar contraseña"
+                  labelPlacement="stacked"
+                  name="confirmacion"
+                  [type]="verContrasena ? 'text' : 'password'"
+                  autocomplete="new-password"
+                  maxlength="30"
+                  required
+                  [(ngModel)]="datos.confirmarContrasena"
+                ></ion-input>
+              </ng-container>
+              <ion-checkbox *ngIf="!registro" name="recordarme" [(ngModel)]="datos.recordarme"
+                >Recordar mi sesión</ion-checkbox
+              >
+              <ion-button type="submit" expand="block" [disabled]="enviando || (auth.comprobando$ | async)"
+                >{{ enviando ? 'Espera un momento…' : registro ? 'Crear cuenta' : 'Iniciar sesión' }}</ion-button
+              >
+            </form>
+            <ion-button expand="block" fill="clear" [disabled]="enviando" (click)="cambiarModo()"
+              >{{ registro ? 'Ya tengo una cuenta' : 'Quiero registrarme' }}</ion-button
+            >
+          </ion-card-content>
+        </ion-card>
+      </ion-col>
+    </ion-row>
+  </ion-grid>
+</ion-content>

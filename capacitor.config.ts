@@ -1,9 +1,12 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'io.ionic.starter',
-  appName: 'appNativa',
-  webDir: 'www'
+  appId: 'co.edu.usco.appnativa',
+  appName: 'TutoLink',
+  webDir: 'www',
+  plugins: {
+    CapacitorHttp: { enabled: false },
+  },
 };
 
 export default config;

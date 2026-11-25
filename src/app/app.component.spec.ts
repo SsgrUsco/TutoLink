@@ -1,13 +1,14 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 
+import { CamaraService } from './nucleo/servicios/camara.service';
 import { AppComponent } from './app.component';
 
 describe('AppComponent', () => {
   it('should create the app', async () => {
     await TestBed.configureTestingModule({
       imports: [AppComponent],
-      providers: [provideRouter([])],
+      providers: [provideRouter([]), { provide: CamaraService, useValue: { iniciar() {} } }],
     }).compileComponents();
 
     const fixture = TestBed.createComponent(AppComponent);
